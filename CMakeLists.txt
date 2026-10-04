@@ -163,10 +163,19 @@ if(HDMI_DRIVER STREQUAL "HDMI_PIO_AUDIO")
     # default N=4096 gives CTS=25200 exactly.  (Matches the working frank-cpc.)
     target_compile_definitions(frank_hdmi_sound INTERFACE FRANK_HDMI_AUDIO_RATE=32000)
     if(PLATFORM STREQUAL "pc")
-        # Olimex PICO-PC: R/G TMDS lanes swapped (blue 14, green 18, red 16)
+        # Olimex PICO-PC: R/G TMDS lanes swapped (blue 14, green 18, red 16).
+        # The pixel clock comes from a PIO state machine instead of a PWM
+        # slice: the default PWM clock on GPIO12/13 is slice 6, which the
+        # board's audio jack also needs (left channel GPIO28 = slice 6 A).
+        # The PIO clock program has no clock divider, so sys_clock must be
+        # exactly the TMDS bit clock (252 MHz).
+        if(CPU_SPEED GREATER 252)
+            message(FATAL_ERROR "PLATFORM=pc with HDMI_PIO_AUDIO requires CPU_SPEED=252")
+        endif()
         target_compile_definitions(frank_hdmi_sound INTERFACE
             FRANK_HDMI_PIN_CLK=12 FRANK_HDMI_PIN_D0=14
-            FRANK_HDMI_PIN_D1=18 FRANK_HDMI_PIN_D2=16)
+            FRANK_HDMI_PIN_D1=18 FRANK_HDMI_PIN_D2=16
+            DVI_USE_PIO_CLOCK=1)
     endif()
 
     add_library(drivers
@@ -594,6 +603,25 @@ endif()
 # open but is not draining it, the default 500 ms blocking write stalls the
 # audio producer and causes a recurring dropout.  0 = drop chars instead.
 target_compile_definitions(frank-micro PRIVATE PICO_STDIO_USB_STDOUT_TIMEOUT_US=0)
+
+# Output: bin/<build type>/<board>-frank-micro-<video>-<MHz>-<version>.uf2,
+# named like the other emulators of the kit (e.g. PCp2-frank-c64-...).
+if(PLATFORM STREQUAL "pc")
+    set(FRANK_BOARD_PREFIX "PCp2")
+else()
+    set(FRANK_BOARD_PREFIX "${PLATFORM}p2")
+endif()
+if(HDMI_DRIVER STREQUAL "HDMI_PIO_AUDIO")
+    set(FRANK_VIDEO_SUFFIX "HDMI")
+elseif(HDMI_DRIVER STREQUAL "HDMI_PIO")
+    set(FRANK_VIDEO_SUFFIX "HDMI-VGA")
+else()
+    set(FRANK_VIDEO_SUFFIX "TV")
+endif()
+set_target_properties(frank-micro PROPERTIES
+    OUTPUT_NAME "${FRANK_BOARD_PREFIX}-frank-micro-${FRANK_VIDEO_SUFFIX}-${CPU_SPEED}MHz-${FRANK_MICRO_VERSION_STR}"
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/bin/${CMAKE_BUILD_TYPE}"
+    ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/bin/${CMAKE_BUILD_TYPE}")
 
 pico_add_extra_outputs(frank-micro)
 target_link_options(frank-micro PRIVATE -Xlinker --print-memory-usage --data-sections --function-sections)

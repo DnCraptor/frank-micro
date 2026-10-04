@@ -370,8 +370,8 @@ int main(void) {
 #else
     {
         int link = testPins(HDMI_BASE_PIN, HDMI_BASE_PIN + 1);
-#if defined(PLATFORM_Z0)
-        SELECT_VGA = false;            /* Z0 has no VGA ribbon */
+#if defined(PLATFORM_Z0) || defined(PLATFORM_PC)
+        SELECT_VGA = false;            /* Z0 and Olimex PICO-PC: HDMI only */
 #else
         SELECT_VGA = (link == 0) || (link == 0x1F);
 #endif

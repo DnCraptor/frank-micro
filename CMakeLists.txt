@@ -22,12 +22,12 @@ endif()
 
 cmake_minimum_required(VERSION 3.13)
 
-# Platform selection: m1, m2, z0
-set(PLATFORM "m2" CACHE STRING "Target platform: m1, m2, z0")
-set_property(CACHE PLATFORM PROPERTY STRINGS m1 m2 z0)
+# Platform selection: m1, m2, z0, pc (Olimex RP2040-PICO-PC + Pico 2)
+set(PLATFORM "pc" CACHE STRING "Target platform: m1, m2, z0, pc")
+set_property(CACHE PLATFORM PROPERTY STRINGS m1 m2 z0 pc)
 
-if(NOT PLATFORM STREQUAL "m1" AND NOT PLATFORM STREQUAL "m2" AND NOT PLATFORM STREQUAL "z0")
-    message(FATAL_ERROR "Unknown PLATFORM '${PLATFORM}' — must be m1, m2, or z0")
+if(NOT PLATFORM STREQUAL "m1" AND NOT PLATFORM STREQUAL "m2" AND NOT PLATFORM STREQUAL "z0" AND NOT PLATFORM STREQUAL "pc")
+    message(FATAL_ERROR "Unknown PLATFORM '${PLATFORM}' — must be m1, m2, z0 or pc")
 endif()
 
 set(CPU_SPEED "252" CACHE STRING "CPU clock in MHz")
@@ -41,8 +41,8 @@ set(HDMI_DRIVER "HDMI_PIO_AUDIO" CACHE STRING "HDMI driver: HDMI_PIO_AUDIO, HDMI
 set_property(CACHE HDMI_DRIVER PROPERTY STRINGS "HDMI_PIO_AUDIO" "HDMI_PIO" "COMPOSITE")
 
 # Composite TV is software-timed on Core 1 and not wired on the Z0 board.
-if(HDMI_DRIVER STREQUAL "COMPOSITE" AND PLATFORM STREQUAL "z0")
-    message(FATAL_ERROR "Composite TV is not supported on the Z0 platform")
+if(HDMI_DRIVER STREQUAL "COMPOSITE" AND (PLATFORM STREQUAL "z0" OR PLATFORM STREQUAL "pc"))
+    message(FATAL_ERROR "Composite TV is not supported on the ${PLATFORM} platform")
 endif()
 
 # Composite-TV needs ~378 MHz: the TV scanline callback fires via a HW-alarm
@@ -82,6 +82,14 @@ if(PLATFORM STREQUAL "m1")
     set(SD_MISO 4)
     set(HDMI_PIN 6)
     set(TV_PIN 6)
+elseif(PLATFORM STREQUAL "pc")
+    set(PLATFORM_DEF PLATFORM_PC)
+    set(BOARD_DEF BOARD_PC)
+    set(SD_CS 22)
+    set(SD_SCK 6)
+    set(SD_MOSI 7)
+    set(SD_MISO 4)
+    set(HDMI_PIN 12)
 elseif(PLATFORM STREQUAL "z0")
     set(PLATFORM_DEF PLATFORM_Z0)
     set(BOARD_DEF BOARD_Z0)
@@ -109,7 +117,13 @@ endif()
 # port is owned by the TinyUSB host stack, so USB-CDC stdio (serial console)
 # and the boot-time USB-enumeration delay are disabled.  Off by default: the
 # native USB port is then used for USB-CDC printf instead (PS/2 only input).
-option(USB_HID_ENABLED "Enable USB HID host (keyboard + gamepad)" OFF)
+# On the Olimex PICO-PC the USB-A port is the main keyboard port: ON by default.
+if(PLATFORM STREQUAL "pc")
+    set(USB_HID_DEFAULT ON)
+else()
+    set(USB_HID_DEFAULT OFF)
+endif()
+option(USB_HID_ENABLED "Enable USB HID host (keyboard + gamepad)" ${USB_HID_DEFAULT})
 
 message(STATUS "frank-micro  Platform: ${PLATFORM}  CPU: ${CPU_SPEED} MHz  Flash: ${FLASH_SPEED} MHz  Voltage: ${CPU_VOLTAGE}  HDMI: ${HDMI_DRIVER}  USB_HID: ${USB_HID_ENABLED}")
 
@@ -148,6 +162,12 @@ if(HDMI_DRIVER STREQUAL "HDMI_PIO_AUDIO")
     # producer bridge (frank_audio.c) resamples to 32000 Hz.  For 32000 Hz the
     # default N=4096 gives CTS=25200 exactly.  (Matches the working frank-cpc.)
     target_compile_definitions(frank_hdmi_sound INTERFACE FRANK_HDMI_AUDIO_RATE=32000)
+    if(PLATFORM STREQUAL "pc")
+        # Olimex PICO-PC: R/G TMDS lanes swapped (blue 14, green 18, red 16)
+        target_compile_definitions(frank_hdmi_sound INTERFACE
+            FRANK_HDMI_PIN_CLK=12 FRANK_HDMI_PIN_D0=14
+            FRANK_HDMI_PIN_D1=18 FRANK_HDMI_PIN_D2=16)
+    endif()
 
     add_library(drivers
         drivers/HDMI_audio.c

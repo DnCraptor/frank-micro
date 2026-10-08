@@ -23,7 +23,7 @@ endif()
 cmake_minimum_required(VERSION 3.13)
 
 # Platform selection: m1, m2, z0, pc (Olimex RP2040-PICO-PC + Pico 2)
-set(PLATFORM "pc" CACHE STRING "Target platform: m1, m2, z0, pc")
+set(PLATFORM "z0" CACHE STRING "Target platform: m1, m2, z0, pc")
 set_property(CACHE PLATFORM PROPERTY STRINGS m1 m2 z0 pc)
 
 if(NOT PLATFORM STREQUAL "m1" AND NOT PLATFORM STREQUAL "m2" AND NOT PLATFORM STREQUAL "z0" AND NOT PLATFORM STREQUAL "pc")
@@ -37,8 +37,19 @@ set(FLASH_SPEED "66"  CACHE STRING "Flash target max frequency in MHz")
 # Video driver: HDMI_PIO_AUDIO (HDMI-embedded audio), HDMI_PIO (PIO HDMI/VGA +
 # I2S/PWM audio) or COMPOSITE (software PAL/NTSC TV + I2S/PWM audio).  Declared
 # here — before the voltage is derived below — so COMPOSITE can raise CPU_SPEED.
-set(HDMI_DRIVER "HDMI_PIO_AUDIO" CACHE STRING "HDMI driver: HDMI_PIO_AUDIO, HDMI_PIO or COMPOSITE")
+# Z0 (Waveshare RP2350-PiZero): HDMI is on GPIO32..39, which only the HDMI_PIO
+# driver supports (PIO GPIO base 16); frank-hdmi-sound is wired for GPIO6..19.
+if(PLATFORM STREQUAL "z0")
+    set(HDMI_DRIVER_DEFAULT "HDMI_PIO")
+else()
+    set(HDMI_DRIVER_DEFAULT "HDMI_PIO_AUDIO")
+endif()
+set(HDMI_DRIVER "${HDMI_DRIVER_DEFAULT}" CACHE STRING "HDMI driver: HDMI_PIO_AUDIO, HDMI_PIO or COMPOSITE")
 set_property(CACHE HDMI_DRIVER PROPERTY STRINGS "HDMI_PIO_AUDIO" "HDMI_PIO" "COMPOSITE")
+
+if(HDMI_DRIVER STREQUAL "HDMI_PIO_AUDIO" AND PLATFORM STREQUAL "z0")
+    message(FATAL_ERROR "HDMI_PIO_AUDIO is wired for GPIO6..19; the z0 platform needs HDMI_DRIVER=HDMI_PIO")
+endif()
 
 # Composite TV is software-timed on Core 1 and not wired on the Z0 board.
 if(HDMI_DRIVER STREQUAL "COMPOSITE" AND (PLATFORM STREQUAL "z0" OR PLATFORM STREQUAL "pc"))
@@ -118,7 +129,8 @@ endif()
 # and the boot-time USB-enumeration delay are disabled.  Off by default: the
 # native USB port is then used for USB-CDC printf instead (PS/2 only input).
 # On the Olimex PICO-PC the USB-A port is the main keyboard port: ON by default.
-if(PLATFORM STREQUAL "pc")
+# On Z0 the keyboard goes to the native USB Type-C port (OTG adapter): ON too.
+if(PLATFORM STREQUAL "pc" OR PLATFORM STREQUAL "z0")
     set(USB_HID_DEFAULT ON)
 else()
     set(USB_HID_DEFAULT OFF)

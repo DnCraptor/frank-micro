@@ -70,6 +70,8 @@ static const char *AUDIO_LABELS[]   = { "HDMI", "I2S", "PWM" };
 static const uint8_t AUDIO_CHOICES[] = { FRANK_AUDIO_HDMI, FRANK_AUDIO_PWM };
 #elif defined(PLATFORM_PC)
 static const uint8_t AUDIO_CHOICES[] = { FRANK_AUDIO_PWM };
+#elif defined(PLATFORM_Z0)
+static const uint8_t AUDIO_CHOICES[] = { FRANK_AUDIO_I2S };
 #elif defined(HDMI_PIO_AUDIO)
 static const uint8_t AUDIO_CHOICES[] = { FRANK_AUDIO_HDMI, FRANK_AUDIO_I2S, FRANK_AUDIO_PWM };
 #else
@@ -216,6 +218,12 @@ void frank_settings_apply_live(void) {
     if (g_frank_settings.audio_driver == FRANK_AUDIO_HDMI)
         g_frank_settings.audio_driver = FRANK_AUDIO_PWM;
 #endif
+#elif defined(PLATFORM_Z0)
+    /* Waveshare RP2350-PiZero: no analog output, sound goes to the I2S DAC
+     * module on GP10..GP12.  Fold PWM and HDMI onto I2S, so a micro.ini written
+     * by a PICO-PC build (audio=pwm) on a shared SD card does not mute it. */
+    if (g_frank_settings.audio_driver != FRANK_AUDIO_I2S)
+        g_frank_settings.audio_driver = FRANK_AUDIO_I2S;
 #elif !defined(HDMI_PIO_AUDIO)
     /* HDMI audio is unavailable in the HDMI_PIO build; fold any persisted
      * "HDMI" selection (e.g. from a micro.ini written by an HDMI_PIO_AUDIO
